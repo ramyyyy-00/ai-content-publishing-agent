@@ -1,0 +1,355 @@
+{
+  "name": "Part 2A - Generate Content",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Submit Project Update",
+        "formDescription": "Enter a research project update. AI will draft LinkedIn, Newsletter and Website versions for approval.",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Project title",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Update type",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Project update"
+                  },
+                  {
+                    "option": "Research findings"
+                  },
+                  {
+                    "option": "Event announcement"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Details",
+              "fieldType": "textarea",
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "e5790fb3-ebf5-4bcc-b7ba-9de683c01f04",
+      "name": "Submit Project Update",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        0
+      ],
+      "webhookId": "69b58743-de54-41a8-b70a-258860a541ed"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "const f = $json;\nconst prompt = `You are the communications officer of Impact Circles, a research organization.\nUsing ONLY the facts below (never invent numbers, names or results), write three versions of the same update.\n\nProject title: ${f['Project title']}\nUpdate type: ${f['Update type']}\nDetails: ${f['Details']}\n\nReturn ONLY a valid JSON object with exactly these keys:\n- linkedin: a professional, engaging LinkedIn post (80-150 words, a short hook, key outcome, 3-4 relevant hashtags, no markdown).\n- newsletter: a concise, informative summary for organizational stakeholders (60-100 words, neutral tone, plain text).\n- website_title: a clear news headline (max 12 words).\n- website_body: a structured news article in markdown with a short intro, a \"Key findings\" or \"What happened\" section as bullet points, and a \"Next steps\" section (150-250 words).`;\nreturn { json: { body: { contents: [{ parts: [{ text: prompt }] }], generationConfig: { responseMimeType: 'application/json' } } } };"
+      },
+      "id": "24819d72-a33b-4c4f-be28-3f7967748041",
+      "name": "Build Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.1-flash-lite:generateContent",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "googlePalmApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.body) }}",
+        "options": {}
+      },
+      "id": "3b5e4e64-38c7-4840-bac8-bf7b44a82ede",
+      "name": "Gemini Generate",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        448,
+        0
+      ],
+      "retryOnFail": true,
+      "maxTries": 4,
+      "waitBetweenTries": 3000,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "sfCT4X5zG7AYslq5",
+          "name": "Google Gemini(PaLM) Api account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const src = $('Submit Project Update').first().json;\nconst raw = $json.candidates?.[0]?.content?.parts?.[0]?.text ?? '';\nlet d;\ntry { d = JSON.parse(raw.replace(/```json|```/g, '').trim()); }\ncatch (e) { throw new Error('Could not parse AI output: ' + raw.slice(0, 200)); }\nconst id = 'C-' + Date.now().toString().slice(-7);\nreturn [{ json: {\n  content_id: id,\n  title: src['Project title'],\n  source_text: src['Details'],\n  linkedin: d.linkedin,\n  newsletter: d.newsletter,\n  website: d.website_title + '\\n\\n' + d.website_body,\n  status: 'PENDING_APPROVAL',\n  channels: '',\n  edited: 'no',\n  created_at: new Date().toISOString(),\n  approved_at: '',\n  published_at: ''\n} }];"
+      },
+      "id": "cc654f12-4d2e-4ca3-ad5c-31953c2e26a7",
+      "name": "Parse and Prepare Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        672,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1Kae3HeWFrjtREp04Ya8PxXtYmD39YkfIygKqCNSSd5E",
+          "mode": "list",
+          "cachedResultName": "Expense Tracker",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Kae3HeWFrjtREp04Ya8PxXtYmD39YkfIygKqCNSSd5E/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1706990470,
+          "mode": "list",
+          "cachedResultName": "Content",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Kae3HeWFrjtREp04Ya8PxXtYmD39YkfIygKqCNSSd5E/edit#gid=1706990470"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "content_id",
+              "displayName": "content_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "title",
+              "displayName": "title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "source_text",
+              "displayName": "source_text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "linkedin",
+              "displayName": "linkedin",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "newsletter",
+              "displayName": "newsletter",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "website",
+              "displayName": "website",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "channels",
+              "displayName": "channels",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "edited",
+              "displayName": "edited",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "approved_at",
+              "displayName": "approved_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "published_at",
+              "displayName": "published_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "7f618128-7e02-4ba1-962c-4d3112040b9d",
+      "name": "Save to Content",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        880,
+        0
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "bSnvbSFAokRABbMG",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_CHAT_ID",
+        "text": "=New content is waiting for approval\nID: {{ $json.content_id }}\nTitle: {{ $json.title }}\n\nLinkedIn draft:\n{{ String($json.linkedin).slice(0, 700) }}\n\nOpen the \"Review and Publish\" form and enter this ID to approve, edit, or reject.",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "6d741a88-2f1d-4670-baf3-4bd58c6d7fd4",
+      "name": "Notify Reviewer",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1104,
+        0
+      ],
+      "webhookId": "c100c738-b272-48ce-a27a-7bb20f83ea57",
+      "credentials": {
+        "telegramApi": {
+          "id": "0LurG1QASoq6xF6C",
+          "name": "Telegram account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Submit Project Update": {
+      "main": [
+        [
+          {
+            "node": "Build Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Prompt": {
+      "main": [
+        [
+          {
+            "node": "Gemini Generate",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Generate": {
+      "main": [
+        [
+          {
+            "node": "Parse and Prepare Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse and Prepare Row": {
+      "main": [
+        [
+          {
+            "node": "Save to Content",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Save to Content": {
+      "main": [
+        [
+          {
+            "node": "Notify Reviewer",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "ddbfdc01-f01d-4cd2-b53f-a7a8bbeb7887",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "26a5ba646c57999c209948ff9549405be00ed5c7ba81481e113bcb073e9b726c"
+  },
+  "nodeGroups": [],
+  "id": "haHeV4ryBu4COjT2",
+  "tags": []
+}

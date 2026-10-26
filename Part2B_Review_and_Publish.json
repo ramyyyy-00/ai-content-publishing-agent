@@ -1,0 +1,960 @@
+{
+  "name": "Part 2B - Review and Publish",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Review and Publish",
+        "formDescription": "Enter the Content ID from the Telegram message. Approve & Publish, Reject, or Save edits (edits always require a new approval).",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Content ID",
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Decision",
+              "fieldType": "radio",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Approve & Publish"
+                  },
+                  {
+                    "option": "Reject"
+                  },
+                  {
+                    "option": "Save edits only"
+                  }
+                ]
+              },
+              "requiredField": true
+            },
+            {
+              "fieldLabel": "Channels",
+              "fieldType": "checkbox",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "Website"
+                  },
+                  {
+                    "option": "LinkedIn"
+                  },
+                  {
+                    "option": "Newsletter"
+                  }
+                ]
+              }
+            },
+            {
+              "fieldLabel": "Edited LinkedIn",
+              "fieldType": "textarea"
+            },
+            {
+              "fieldLabel": "Edited Newsletter",
+              "fieldType": "textarea"
+            },
+            {
+              "fieldLabel": "Edited Website",
+              "fieldType": "textarea"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "f6cf333e-750c-4dfb-8b6b-f288e0ffcea6",
+      "name": "Review Form",
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.2,
+      "position": [
+        0,
+        208
+      ],
+      "webhookId": "2b5b8951-0d34-4821-8ad7-3c577ac844a6"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "1Kae3HeWFrjtREp04Ya8PxXtYmD39YkfIygKqCNSSd5E",
+          "mode": "list",
+          "cachedResultName": "Expense Tracker",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Kae3HeWFrjtREp04Ya8PxXtYmD39YkfIygKqCNSSd5E/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1706990470,
+          "mode": "list",
+          "cachedResultName": "Content",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Kae3HeWFrjtREp04Ya8PxXtYmD39YkfIygKqCNSSd5E/edit#gid=1706990470"
+        },
+        "filtersUI": {
+          "values": [
+            {
+              "lookupColumn": "content_id",
+              "lookupValue": "={{ $json['Content ID'] }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "7101d92e-ffa6-43a9-84bd-51a1734abe2b",
+      "name": "Get Content Row",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        224,
+        208
+      ],
+      "alwaysOutputData": true,
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "bSnvbSFAokRABbMG",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const form = $('Review Form').first().json;\nconst found = $input.all().map(i => i.json).filter(r => r.content_id);\nconst row = found[0];\nif (!row) return [{ json: { action: 'notfound', needs_update: false, message: 'Content ID not found: ' + form['Content ID'] } }];\n\nconst asList = v => Array.isArray(v) ? v : (v ? String(v).split(',').map(s => s.trim()).filter(Boolean) : []);\nconst decision = form['Decision'];\nconst channels = asList(form['Channels']);\nconst eLi = String(form['Edited LinkedIn'] || '').trim();\nconst eNe = String(form['Edited Newsletter'] || '').trim();\nconst eWe = String(form['Edited Website'] || '').trim();\nconst hasEdits = !!(eLi || eNe || eWe) || decision === 'Save edits only';\n\nconst out = {\n  content_id: row.content_id,\n  linkedin: eLi || row.linkedin,\n  newsletter: eNe || row.newsletter,\n  website: eWe || row.website,\n  status: row.status,\n  channels: row.channels || '',\n  edited: row.edited || 'no',\n  approved_at: row.approved_at || ''\n};\n\nif (row.status === 'PUBLISHED')\n  return [{ json: { action: 'blocked', needs_update: false, message: row.content_id + ' is already published.' } }];\n\nif (decision === 'Reject') {\n  out.status = 'REJECTED';\n  return [{ json: { action: 'reject', needs_update: true, row: out, message: row.content_id + ' was rejected. Nothing was published.' } }];\n}\n\nif (hasEdits) {\n  // Any edit resets approval: the content must be approved again before publishing.\n  out.status = 'PENDING_APPROVAL';\n  out.edited = 'yes';\n  out.approved_at = '';\n  return [{ json: { action: 'edit', needs_update: true, row: out,\n    message: 'Edits saved for ' + row.content_id + '. NOT published. Submit the form again with \"Approve & Publish\" to approve the updated version.' } }];\n}\n\nif (!['PENDING_APPROVAL', 'PUBLISH_FAILED'].includes(row.status))\n  return [{ json: { action: 'blocked', needs_update: false, message: row.content_id + ' cannot be approved from status ' + row.status + '.' } }];\n\nif (channels.length === 0)\n  return [{ json: { action: 'blocked', needs_update: false, message: 'Select at least one channel to publish.' } }];\n\nout.status = 'APPROVED';\nout.channels = channels.join(', ');\nout.approved_at = new Date().toISOString();\nreturn [{ json: { action: 'publish', needs_update: true, row: out, message: 'Approved.' } }];"
+      },
+      "id": "95b5f88c-34e5-407b-b7f9-b156721ae5b1",
+      "name": "Decide",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        448,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "8e86ef26-f7f3-4184-8143-e42af954c8ef",
+              "leftValue": "={{ $json.needs_update }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "adef2c49-f35e-443a-ac02-e4d8b193235a",
+      "name": "Needs update?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        672,
+        208
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1Kae3HeWFrjtREp04Ya8PxXtYmD39YkfIygKqCNSSd5E",
+          "mode": "list",
+          "cachedResultName": "Expense Tracker",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Kae3HeWFrjtREp04Ya8PxXtYmD39YkfIygKqCNSSd5E/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1706990470,
+          "mode": "list",
+          "cachedResultName": "الورقة2",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Kae3HeWFrjtREp04Ya8PxXtYmD39YkfIygKqCNSSd5E/edit#gid=1706990470"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "content_id": "={{ $('Decide').first().json.row.content_id }}",
+            "linkedin": "={{ $('Decide').first().json.row.linkedin }}",
+            "newsletter": "={{ $('Decide').first().json.row.newsletter }}",
+            "website": "={{ $('Decide').first().json.row.website }}",
+            "status": "={{ $('Decide').first().json.row.status }}",
+            "channels": "={{ $('Decide').first().json.row.channels }}",
+            "edited": "={{ $('Decide').first().json.row.edited }}",
+            "approved_at": "={{ $('Decide').first().json.row.approved_at }}"
+          },
+          "matchingColumns": [
+            "content_id"
+          ],
+          "schema": [
+            {
+              "id": "content_id",
+              "displayName": "content_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "title",
+              "displayName": "title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "source_text",
+              "displayName": "source_text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "linkedin",
+              "displayName": "linkedin",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "newsletter",
+              "displayName": "newsletter",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "website",
+              "displayName": "website",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "channels",
+              "displayName": "channels",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "edited",
+              "displayName": "edited",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "approved_at",
+              "displayName": "approved_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "published_at",
+              "displayName": "published_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "bdf50ed5-d84d-48a6-b634-239c6d6f4541",
+      "name": "Update Content",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        672,
+        16
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "bSnvbSFAokRABbMG",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 2
+          },
+          "conditions": [
+            {
+              "id": "e6f6faa7-788c-49bd-8a4d-11784c3ed3d6",
+              "leftValue": "={{ $('Decide').first().json.action }}",
+              "rightValue": "publish",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "2d1b7960-b989-47b4-890e-6a8c3e5b3ee4",
+      "name": "Publish approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [
+        880,
+        112
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const d = $('Decide').first().json.row;\nconst ch = String(d.channels).split(',').map(s => s.trim()).filter(Boolean);\nreturn ch.map(c => {\n  const text = c === 'LinkedIn' ? d.linkedin : c === 'Newsletter' ? d.newsletter : d.website;\n  const title = c === 'Website' ? String(d.website).split('\\n')[0] : c + ' post ' + d.content_id;\n  return { json: { content_id: d.content_id, channel: c, title, body: text } };\n});"
+      },
+      "id": "cc9eb062-a970-4e93-b5c1-31753b2150df",
+      "name": "Build Publish Calls",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1104,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://jsonplaceholder.typicode.com/posts",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify({ title: $json.title, body: $json.body, userId: 1 }) }}",
+        "options": {}
+      },
+      "id": "32d067c2-8138-4b0e-8b45-bdbad382e563",
+      "name": "Publish (Mock API)",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        1328,
+        0
+      ],
+      "onError": "continueRegularOutput"
+    },
+    {
+      "parameters": {
+        "jsCode": "const calls = $('Build Publish Calls').all();\nreturn $input.all().map((it, i) => {\n  const c = calls[i].json;\n  const ok = it.json.id && !it.json.error;\n  return { json: {\n    content_id: c.content_id,\n    channel: c.channel,\n    status: ok ? 'SUCCESS' : 'FAILED',\n    published_url: ok ? 'https://jsonplaceholder.typicode.com/posts/' + it.json.id : '',\n    timestamp: new Date().toISOString(),\n    message: ok ? 'Published to MOCK API (test mode)' : String((it.json.error && it.json.error.message) || it.json.error || 'Unknown error')\n  } };\n});"
+      },
+      "id": "a5aba74a-2b1d-43bb-9350-b0992f1e4c1e",
+      "name": "Build Log",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1552,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1Kae3HeWFrjtREp04Ya8PxXtYmD39YkfIygKqCNSSd5E",
+          "mode": "list",
+          "cachedResultName": "Expense Tracker",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Kae3HeWFrjtREp04Ya8PxXtYmD39YkfIygKqCNSSd5E/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1202358047,
+          "mode": "list",
+          "cachedResultName": "PublishLog",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Kae3HeWFrjtREp04Ya8PxXtYmD39YkfIygKqCNSSd5E/edit#gid=1202358047"
+        },
+        "columns": {
+          "mappingMode": "autoMapInputData",
+          "value": {},
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "content_id",
+              "displayName": "content_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "published_url",
+              "displayName": "published_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "message",
+              "displayName": "message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "e2e2c8d6-9291-4b70-aa44-f7c7da35ceae",
+      "name": "Append Publish Log",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        1776,
+        -32
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "bSnvbSFAokRABbMG",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const logs = $input.all().map(i => i.json);\nconst allOk = logs.every(l => l.status === 'SUCCESS');\nreturn [{ json: {\n  content_id: logs[0].content_id,\n  status: allOk ? 'PUBLISHED' : 'PUBLISH_FAILED',\n  published_at: new Date().toISOString(),\n  summary: logs.map(l => l.channel + ': ' + l.status).join(', ')\n} }];"
+      },
+      "id": "57c0daf4-c031-44ee-a171-303da05c8c7c",
+      "name": "Summarize Result",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1984,
+        0
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentId": {
+          "__rl": true,
+          "value": "1Kae3HeWFrjtREp04Ya8PxXtYmD39YkfIygKqCNSSd5E",
+          "mode": "list",
+          "cachedResultName": "Expense Tracker",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Kae3HeWFrjtREp04Ya8PxXtYmD39YkfIygKqCNSSd5E/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1706990470,
+          "mode": "list",
+          "cachedResultName": "Content",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Kae3HeWFrjtREp04Ya8PxXtYmD39YkfIygKqCNSSd5E/edit#gid=1706990470"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "content_id": "={{ $('Summarize Result').first().json.content_id }}",
+            "status": "={{ $('Summarize Result').first().json.status }}",
+            "published_at": "={{ $('Summarize Result').first().json.published_at }}"
+          },
+          "matchingColumns": [
+            "content_id"
+          ],
+          "schema": [
+            {
+              "id": "content_id",
+              "displayName": "content_id",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": false
+            },
+            {
+              "id": "title",
+              "displayName": "title",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "source_text",
+              "displayName": "source_text",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "linkedin",
+              "displayName": "linkedin",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "newsletter",
+              "displayName": "newsletter",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "website",
+              "displayName": "website",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "status",
+              "displayName": "status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "channels",
+              "displayName": "channels",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "edited",
+              "displayName": "edited",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "created_at",
+              "displayName": "created_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "approved_at",
+              "displayName": "approved_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "published_at",
+              "displayName": "published_at",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "channel",
+              "displayName": "channel",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "published_url",
+              "displayName": "published_url",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "timestamp",
+              "displayName": "timestamp",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "message",
+              "displayName": "message",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true,
+              "removed": true
+            },
+            {
+              "id": "row_number",
+              "displayName": "row_number",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "number",
+              "canBeUsedToMatch": true,
+              "readOnly": true,
+              "removed": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "id": "c5687368-5fc1-4955-9ec9-19222caa6195",
+      "name": "Update Published Status",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.5,
+      "position": [
+        2208,
+        -16
+      ],
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "bSnvbSFAokRABbMG",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_CHAT_ID",
+        "text": "=Publication {{ $('Summarize Result').first().json.status }} for {{ $('Summarize Result').first().json.content_id }}\n{{ $('Summarize Result').first().json.summary }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "3bd87943-e5a6-42a1-90cd-d8c7819f33ec",
+      "name": "Notify Publication Result",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2432,
+        0
+      ],
+      "webhookId": "1cad09da-f200-421f-8e88-dc5c0842bab2",
+      "credentials": {
+        "telegramApi": {
+          "id": "0LurG1QASoq6xF6C",
+          "name": "Telegram account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "YOUR_CHAT_ID",
+        "text": "={{ $('Decide').first().json.message }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "id": "455770ab-cf18-4430-b850-86d3aaf0812a",
+      "name": "Notify Result",
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1104,
+        400
+      ],
+      "webhookId": "22d78a80-67c4-4f67-94e2-8b87915a22ae",
+      "credentials": {
+        "telegramApi": {
+          "id": "0LurG1QASoq6xF6C",
+          "name": "Telegram account"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Review Form": {
+      "main": [
+        [
+          {
+            "node": "Get Content Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Content Row": {
+      "main": [
+        [
+          {
+            "node": "Decide",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Decide": {
+      "main": [
+        [
+          {
+            "node": "Needs update?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Needs update?": {
+      "main": [
+        [
+          {
+            "node": "Update Content",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Content": {
+      "main": [
+        [
+          {
+            "node": "Publish approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publish approved?": {
+      "main": [
+        [
+          {
+            "node": "Build Publish Calls",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Notify Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Publish Calls": {
+      "main": [
+        [
+          {
+            "node": "Publish (Mock API)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Publish (Mock API)": {
+      "main": [
+        [
+          {
+            "node": "Build Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Log": {
+      "main": [
+        [
+          {
+            "node": "Append Publish Log",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append Publish Log": {
+      "main": [
+        [
+          {
+            "node": "Summarize Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Summarize Result": {
+      "main": [
+        [
+          {
+            "node": "Update Published Status",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update Published Status": {
+      "main": [
+        [
+          {
+            "node": "Notify Publication Result",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "availableInMCP": true
+  },
+  "versionId": "eec6876c-6b71-49e3-abb7-9b73cba3e0fd",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "26a5ba646c57999c209948ff9549405be00ed5c7ba81481e113bcb073e9b726c"
+  },
+  "nodeGroups": [],
+  "id": "xiDPLZOLeSYGX1YV",
+  "tags": []
+}
